@@ -316,15 +316,6 @@ module borrowlend::borrowlend
         assert!(balance_of(collection_pool_address,token_id)>=1,ENO_NO_TOKEN_IN_TOKEN_STORE);
         direct_transfer(&pool_signer_from_cap,lender,token_id,1);        
         //delete accounts from borrower and lender
-        let dropdata = move_from<Lender>(lender_addr);
-        let Lender{
-        borrower:_,
-        collection: _,
-        offer_amount:_,
-        start_time:_,
-        offered_made:_,
-        dpr:_,
-        days:_}=dropdata;
         let borrow_drop_data = move_from<Borrower>(lender_data.borrower);
         let Borrower{
         lender:_,
@@ -335,6 +326,15 @@ module borrowlend::borrowlend
         start_time:_,
         dpr:_,
         days:_}=borrow_drop_data;
+        let dropdata = move_from<Lender>(lender_addr);
+        let Lender{
+        borrower:_,
+        collection: _,
+        offer_amount:_,
+        start_time:_,
+        offered_made:_,
+        dpr:_,
+        days:_}=dropdata;
     }
     fun create_add_resource_info(account:&signer,string:String,resource:address) acquires ResourceInfo
     {
