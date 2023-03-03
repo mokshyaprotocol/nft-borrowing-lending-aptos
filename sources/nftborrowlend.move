@@ -6,6 +6,7 @@ module borrowlend::borrowlend
     use std::string::{String,append};
     use aptos_framework::account;
     use aptos_framework::coin;
+    use aptos_framework::managed_coin;
     use aptos_token::token::{Self,check_collection_exists,balance_of,direct_transfer};
     use std::bcs::to_bytes;
     use aptos_std::table::{Self, Table};
@@ -178,6 +179,10 @@ module borrowlend::borrowlend
         //Adding the offer in the pool as well
         table::upsert(&mut pool_data.offer,lender_addr,Amount{offer_per_nft,number_of_offers,total_amount});
         //sending the fund to the pool
+         let pool_signer_from_cap = account::create_signer_with_capability(&pool_data.treasury_cap);
+        if (!coin::is_account_registered<0x1::aptos_coin::AptosCoin>(collection_pool_address))
+        {managed_coin::register<0x1::aptos_coin::AptosCoin>(&pool_signer_from_cap); 
+        };
         coin::transfer<0x1::aptos_coin::AptosCoin>(lender, collection_pool_address, total_amount);
     }
     public entry fun lender_offer_cancel(
