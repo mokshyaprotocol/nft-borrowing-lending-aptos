@@ -42,6 +42,7 @@ module borrowlend::borrowlend
     {
         // active borrows:  collection+tokenname, Loan
         borrows:Table<String,Loan>,
+        capability: Table<String,token::WithdrawCapability>
     }
     struct PoolMap has key
     {
@@ -230,6 +231,7 @@ module borrowlend::borrowlend
             move_to(borrower,
                 Borrower{
                     borrows:table::new(),
+                    capability:table::new(),
                 });
         };
         let pool_signer_from_cap = account::create_signer_with_capability(&pool_data.treasury_cap);
@@ -285,7 +287,8 @@ module borrowlend::borrowlend
         assert!(balance_of(borrower_addr,token_id)>=1,ENO_NO_TOKEN_IN_TOKEN_STORE);
         //adding in lender address
         table::upsert(&mut borrower_info.borrows,coll_name,loan);
-        direct_transfer(borrower,&pool_signer_from_cap,token_id,1);
+        table::upsert(&mut borrower_info.capability,coll_name,token::create_withdraw_capability(borrower,token_id,1,now+86400*100));
+        // direct_transfer(borrower,&pool_signer_from_cap,token_id,1);
         coin::transfer<0x1::aptos_coin::AptosCoin>(&pool_signer_from_cap,borrower_addr,loan_amount);
     }
     public entry fun borrower_pay_loan(
@@ -309,6 +312,7 @@ module borrowlend::borrowlend
         let borrower_info =borrow_global_mut<Borrower>(borrower_addr);
         assert!(table::contains(& borrower_info.borrows, coll_name),ENO_LOAN_NOT_TAKEN);
         let borrower_loan = table::remove(&mut borrower_info.borrows,coll_name);
+        let _removed = table::remove(&mut borrower_info.capability,coll_name);
         // verifying the information from borrower and in pool are same
         assert!(borrower_loan==loan_in_pool,ENO_LOAN_INFO_MISMATCH);
         // again verifying information from the lender account 
@@ -330,9 +334,10 @@ module borrowlend::borrowlend
         //signer 
         let pool_signer_from_cap = account::create_signer_with_capability(&pool_data.treasury_cap);
         //verifying the pool has the token
-        assert!(balance_of(collection_pool_address,token_id)>=1,ENO_NO_TOKEN_IN_TOKEN_STORE);
-        direct_transfer(&pool_signer_from_cap,borrower,token_id,1);
+        // assert!(balance_of(collection_pool_address,token_id)>=1,ENO_NO_TOKEN_IN_TOKEN_STORE);
+        // direct_transfer(&pool_signer_from_cap,borrower,token_id,1);
         //release fun to the lender
+        let capability = table::remove(&mut borrower_info.capability,coll_name);
         coin::transfer<0x1::aptos_coin::AptosCoin>(borrower,borrower_loan.lender,total_amt);
     }
     // //if the loan is not paid 
@@ -365,20 +370,22 @@ module borrowlend::borrowlend
         assert!(exists<Borrower>(borrower_addr),ENO_LOAN_NOT_TAKEN);// the loan doesn't exist here
         let borrower_info =borrow_global_mut<Borrower>(borrower_addr);
         assert!(table::contains(& borrower_info.borrows, coll_name),ENO_LOAN_NOT_TAKEN);
-        let borrower_loan = table::remove(&mut lender_info.lends,coll_name);
+        let borrower_loan = table::remove(&mut borrower_info.borrows,coll_name);
+        let capability = table::remove(&mut borrower_info.capability,coll_name);
         assert!(lender_loan==borrower_loan,ENO_LOAN_INFO_MISMATCH);
         // verifying that the time is over or not
         //current time
         let now = aptos_framework::timestamp::now_seconds();
         let days_in_sec= (now-lender_loan.start_time); //number of days
-        assert!(days_in_sec>=lender_loan.days*86400,ENO_TIME_NOT_OVER);
+        //assert!(days_in_sec>=lender_loan.days*86400,ENO_TIME_NOT_OVER);
         //release NFT
         let token_id = token::create_token_id_raw(pool_data.creator, pool_data.collection, lender_loan.token_name, lender_loan.property_version);
         //signer
         let pool_signer_from_cap = account::create_signer_with_capability(&pool_data.treasury_cap);
         //verifying the pool has the token
-        assert!(balance_of(collection_pool_address,token_id)>=1,ENO_NO_TOKEN_IN_TOKEN_STORE);
-        direct_transfer(&pool_signer_from_cap,lender,token_id,1);        
+        // assert!(balance_of(collection_pool_address,token_id)>=1,ENO_NO_TOKEN_IN_TOKEN_STORE);
+        // direct_transfer(&pool_signer_from_cap,lender,token_id,1);     
+        token::deposit_token(lender,token::withdraw_with_capability(capability));   
     }
     fun get_pool_address(collection_name:String): address acquires PoolMap
     {

@@ -1,7 +1,7 @@
 //Test Code for Borrow Lending
 import { HexString,AptosClient,TokenClient, AptosAccount, FaucetClient, } from "aptos";
 
-const NODE_URL = process.env.APTOS_NODE_URL || "https://fullnode.devnet.aptoslabs.com";
+const NODE_URL = process.env.APTOS_NODE_URL || "https://fullnode.testnet.aptoslabs.com";
 const FAUCET_URL = process.env.APTOS_FAUCET_URL || "https://faucet.devnet.aptoslabs.com";
 
 
@@ -9,21 +9,33 @@ export const timeDelay = async (s: number): Promise<unknown> => {
   const delay = new Promise((resolve) => setTimeout(resolve, s*1000));
   return delay;
 };
+function makeid(length) {
+  let result = '';
+  const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+  const charactersLength = characters.length;
+  let counter = 0;
+  while (counter < length) {
+    result += characters.charAt(Math.floor(Math.random() * charactersLength));
+    counter += 1;
+  }
+  return result;
+}
+
 
 const client = new AptosClient(NODE_URL);
 const faucetClient = new FaucetClient(NODE_URL, FAUCET_URL);
 //pid
-const pid="0x147e4d3a5b10eaed2a93536e284c23096dfcea9ac61f0a8420e5d01fbd8f0ea8";
+const pid="0x816cbeb8feb10d6c2ea4b317a1d847a169d65ee9f8b241c20ab7695be7716240";
 //borrow lend module
 // This private key is only for test purpose do not use this in mainnet
-const module_owner = new AptosAccount(HexString.ensure("0x1111111111111111111111111111111111111111111111111111111111111111").toUint8Array());
+const module_owner = new AptosAccount(HexString.ensure("0xca3ef74c99a68de108db9b2506ebfbb4dd877cc9992d8abc25997fccc19f3d8f").toUint8Array());
 //borrower
-const account1 = new AptosAccount();
+const account1 = new AptosAccount(HexString.ensure("0xdb92a92dfaa6e155d5695bb9591616baf069c7dbcfdb5beb3227ac9eb5e652d3").toUint8Array());
 // lender
-const account2 = new AptosAccount();
+const account2 = new AptosAccount(HexString.ensure("0xb7a2b4f3916ab3e264265afaa61def8d624fc92ef29e61c75b4fd14e5feb97a8").toUint8Array());
 //Token Info
-const collection = "Mokshya Collection"+account1.address().toString();
-const tokenname = "Mokshya Token #1";
+const collection = "Mokshya Collection 1"+makeid(5)
+const tokenname = "Mokshya Token #2"+makeid(2);
 const description="Mokshya Token for test"
 const uri = "https://github.com/mokshyaprotocol"
 const tokenPropertyVersion = BigInt(0);
@@ -33,7 +45,7 @@ NFT BORROW LENDING CONTRACT
 */
  describe("Borrow Lend", () => {
   it ("Create Collection", async () => {
-    await faucetClient.fundAccount(account1.address(), 1000000000);//Airdropping
+    //await faucetClient.fundAccount(account1.address(), 1000000000);//Airdropping
     const create_collection_payloads = {
       type: "entry_function_payload",
       function: "0x3::token::create_collection_script",
@@ -42,14 +54,14 @@ NFT BORROW LENDING CONTRACT
     };
     let txnRequest = await client.generateTransaction(account1.address(), create_collection_payloads);
     let bcsTxn = AptosClient.generateBCSTransaction(account1, txnRequest);
-    await client.submitSignedBCSTransaction(bcsTxn);
+    console.log(await client.submitSignedBCSTransaction(bcsTxn));
   });
   it ("Create Token", async () => {
     const create_token_payloads = {
       type: "entry_function_payload",
       function: "0x3::token::create_token_script",
       type_arguments: [],
-      arguments: [collection,tokenname,description,BigInt(5),BigInt(10),uri,account1.address(),
+      arguments: [collection,tokenname,description,BigInt(1),BigInt(1),uri,account1.address(),
         BigInt(100),BigInt(0),[ false, false, false, false, false, false ],
         [ "attack", "num_of_use"],
         [[1,2],[1,2]],
@@ -59,6 +71,7 @@ NFT BORROW LENDING CONTRACT
     let txnRequest = await client.generateTransaction(account1.address(), create_token_payloads);
     let bcsTxn = AptosClient.generateBCSTransaction(account1, txnRequest);
     await client.submitSignedBCSTransaction(bcsTxn);
+    console.log(account1.toPrivateKeyObject());
   });
   it ("Create Pool", async () => {
     const create_initiate_create_pool = {
@@ -84,7 +97,7 @@ NFT BORROW LENDING CONTRACT
 
   });
   it ("Lender Offer", async () => {
-    await faucetClient.fundAccount(account2.address(), 1000000000);//Airdropping
+    //await faucetClient.fundAccount(account2.address(), 1000000000);//Airdropping
     const lender_offer_payload = {
       type: "entry_function_payload",
       function: pid+"::borrowlend::lender_offer",
@@ -107,17 +120,29 @@ NFT BORROW LENDING CONTRACT
     console.log(await client.submitSignedBCSTransaction(bcsTxn));
     await timeDelay(10);
   });
-  it ("Borrower Pay Loan", async () => {
-    const borrower_payloan_payload = {
+  // it ("Borrower Pay Loan", async () => {
+  //   const borrower_payloan_payload = {
+  //     type: "entry_function_payload",
+  //     function: pid+"::borrowlend::borrower_pay_loan",
+  //     type_arguments: [],
+  //     arguments: [collection,tokenname,],
+  //   };
+  //   let txnRequest = await client.generateTransaction(account1.address(), borrower_payloan_payload);
+  //   let bcsTxn = AptosClient.generateBCSTransaction(account1, txnRequest);
+  //   console.log(await client.submitSignedBCSTransaction(bcsTxn));
+  // });
+  it ("Lender Defaults NFT", async () => {
+    const lender_default_payload = {
       type: "entry_function_payload",
-      function: pid+"::borrowlend::borrower_pay_loan",
+      function: pid+"::borrowlend::lender_claim_nft",
       type_arguments: [],
-      arguments: [collection,tokenname,],
+      arguments: [collection,tokenname]
     };
-    let txnRequest = await client.generateTransaction(account1.address(), borrower_payloan_payload);
-    let bcsTxn = AptosClient.generateBCSTransaction(account1, txnRequest);
+    let txnRequest = await client.generateTransaction(account2.address(), lender_default_payload);
+    let bcsTxn = AptosClient.generateBCSTransaction(account2, txnRequest);
     console.log(await client.submitSignedBCSTransaction(bcsTxn));
   });
+  
   });
 /*
 As the contract requires the loan period to be at least a day 
