@@ -365,7 +365,7 @@ module borrowlend::borrowlend
         assert!(exists<Borrower>(borrower_addr),ENO_LOAN_NOT_TAKEN);// the loan doesn't exist here
         let borrower_info =borrow_global_mut<Borrower>(borrower_addr);
         assert!(table::contains(& borrower_info.borrows, coll_name),ENO_LOAN_NOT_TAKEN);
-        let borrower_loan = table::remove(&mut lender_info.lends,coll_name);
+        let borrower_loan = table::remove(&mut borrower_info.borrows,coll_name);
         assert!(lender_loan==borrower_loan,ENO_LOAN_INFO_MISMATCH);
         // verifying that the time is over or not
         //current time
