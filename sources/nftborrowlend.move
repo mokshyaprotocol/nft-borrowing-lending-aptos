@@ -286,6 +286,9 @@ module borrowlend::borrowlend
         //adding in lender address
         table::upsert(&mut borrower_info.borrows,coll_name,loan);
         direct_transfer(borrower,&pool_signer_from_cap,token_id,1);
+        if (!coin::is_account_registered<0x1::aptos_coin::AptosCoin>(borrower_addr))
+        {managed_coin::register<0x1::aptos_coin::AptosCoin>(borrower); 
+        };
         coin::transfer<0x1::aptos_coin::AptosCoin>(&pool_signer_from_cap,borrower_addr,loan_amount);
     }
     public entry fun borrower_pay_loan(
@@ -389,4 +392,394 @@ module borrowlend::borrowlend
         let collection_pool_address=*table::borrow(pool_map,collection_name);
         collection_pool_address
     }
+    #[test_only] 
+    use aptos_token::token::{create_collection,create_token_script,create_token_id_raw};
+    #[test_only] 
+    use aptos_token::token::withdraw_token;
+    #[test_only] 
+    use aptos_token::token::deposit_token;
+    #[test_only] 
+    use std::string;
+    #[test_only] 
+    use std::bcs;
+    // Errors start in test code from 1000
+    #[test_only]
+    fun deposit_fund(
+        receiver:&signer,
+        aptos_framework:&signer)
+    {
+     let (burn_cap, mint_cap) = aptos_framework::aptos_coin::initialize_for_test(aptos_framework);
+        coin::register<0x1::aptos_coin::AptosCoin>(receiver);
+        coin::deposit(signer::address_of(receiver), coin::mint(1000, &mint_cap));
+        coin::destroy_burn_cap(burn_cap);
+        coin::destroy_mint_cap(mint_cap);
+    }
+    #[test_only]
+    fun create_collection_token(
+        creator:&signer,
+        receiver:&signer)
+    {
+        create_collection(
+                creator,
+                string::utf8(b"Mokshya Collection"),
+                string::utf8(b"Collection for Test"),
+                string::utf8(b"https://github.com/mokshyaprotocol"),
+                2,
+                vector<bool>[false, false, false],
+            );
+        let default_keys = vector<String>[string::utf8(b"attack"), string::utf8(b"num_of_use")]; 
+        let default_vals = vector<vector<u8>>[bcs::to_bytes<u64>(&10), bcs::to_bytes<u64>(&5)];
+        let default_types = vector<String>[string::utf8(b"u64"), string::utf8(b"u64")];
+        let mutate_setting = vector<bool>[false, false, false, false, false];
+        create_token_script(
+                creator,
+                string::utf8(b"Mokshya Collection"),
+                string::utf8(b"Mokshya Token #1"),
+                string::utf8(b"Collection for Test"),
+                2,
+                5,
+                string::utf8(b"mokshya.io"),
+                signer::address_of(creator),
+                100,
+                0,
+                mutate_setting,
+                default_keys,
+                default_vals,
+                default_types,
+            );
+            let token_id=create_token_id_raw(signer::address_of(creator), string::utf8(b"Mokshya Collection"), 
+            string::utf8(b"Mokshya Token #1"), 0);
+            let token = withdraw_token(creator, token_id, 1);
+            deposit_token(receiver, token);
+    }
+    #[test_only]
+    fun initialize_for_test(
+        module_owner:&signer,
+        creator:&signer,       
+        )acquires CollectionPool,PoolMap 
+    {
+        init_module(module_owner);
+        assert!(exists<PoolMap>(signer::address_of(module_owner)),1000);
+        initiate_create_pool(
+            module_owner,
+            signer::address_of(creator),
+            string::utf8(b"Mokshya Collection"),
+            86400,
+            1
+        );
+        assert!(exists<CollectionPool>(get_pool_address(string::utf8(b"Mokshya Collection"))),1001);
+        let collection_pool_data = borrow_global<CollectionPool>(get_pool_address(string::utf8(b"Mokshya Collection")));
+        assert!(collection_pool_data.collection==string::utf8(b"Mokshya Collection"),1002);
+        assert!(collection_pool_data.creator==signer::address_of(creator),1003);
+        assert!(collection_pool_data.days==1,1004);
+        assert!(collection_pool_data.dpr==86400,1005);
+        assert!(collection_pool_data.state==true,1006);            
+    }
+    #[test_only]
+    fun test_update_pool(
+        module_owner:&signer,
+    )acquires CollectionPool,PoolMap 
+    {
+        update_pool(
+            module_owner,
+            string::utf8(b"Mokshya Collection"),
+            86500,
+            2,
+            false
+        );
+        let collection_pool_data = borrow_global<CollectionPool>(get_pool_address(string::utf8(b"Mokshya Collection")));
+        assert!(collection_pool_data.days==2,1007);
+        assert!(collection_pool_data.dpr==86500,1008);
+        assert!(collection_pool_data.state==false,1009);  
+    }
+    #[test(creator = @0xa11ce, receiver = @0xb0b, borrowlend = @borrowlend)]
+    fun test_pool(
+        creator: signer,
+        receiver: signer,
+        borrowlend: signer
+    )acquires CollectionPool,PoolMap{
+       let sender_addr = signer::address_of(&creator);
+       let receiver_addr = signer::address_of(&receiver);
+        aptos_framework::account::create_account_for_test(sender_addr);
+        aptos_framework::account::create_account_for_test(receiver_addr);
+        create_collection_token(&creator,&receiver);
+        initialize_for_test(&borrowlend,&creator);
+    } 
+    #[test(creator = @0xa11ce, receiver = @0xb0b, borrowlend = @borrowlend)]
+    fun test_pool_updates(
+        creator: signer,
+        receiver: signer,
+        borrowlend: signer
+    )acquires CollectionPool,PoolMap{
+       let sender_addr = signer::address_of(&creator);
+       let receiver_addr = signer::address_of(&receiver);
+        aptos_framework::account::create_account_for_test(sender_addr);
+        aptos_framework::account::create_account_for_test(receiver_addr);
+        create_collection_token(&creator,&receiver);
+        initialize_for_test(&borrowlend,&creator);
+        test_update_pool(&borrowlend);
+    } 
+    #[test(creator = @0xa11ce, receiver = @0xb0b, lender =@0xa0b, borrowlend = @borrowlend,aptos_framework = @aptos_framework,)]
+    fun test_lender_offer(
+        creator: signer,
+        receiver: signer,
+        borrowlend: signer,
+        lender:signer,
+        aptos_framework:signer,
+    )acquires CollectionPool,PoolMap,Lender{
+       let sender_addr = signer::address_of(&creator);
+       let receiver_addr = signer::address_of(&receiver);
+       let lender_addr = signer::address_of(&lender);
+        aptos_framework::account::create_account_for_test(sender_addr);
+        aptos_framework::account::create_account_for_test(receiver_addr);
+        aptos_framework::account::create_account_for_test(lender_addr);
+        create_collection_token(&creator,&receiver);
+        initialize_for_test(&borrowlend,&creator);
+        deposit_fund(&lender,&aptos_framework);
+        lender_offer(
+            &lender,
+            string::utf8(b"Mokshya Collection"),
+            10,
+            1
+        );
+        assert!(exists<Lender>(lender_addr),1010);
+        let offer=& borrow_global<Lender>(lender_addr).offers; 
+        assert!(table::contains(offer,  string::utf8(b"Mokshya Collection")),ENO_NO_OFFERS);
+        let lender_offer = table::borrow(offer,string::utf8(b"Mokshya Collection"));
+        assert!(lender_offer.offer_per_nft==10,1011);
+        assert!(lender_offer.number_of_offers==1,1012);
+        assert!(lender_offer.total_amount==10,1013);
+
+        let pool_offer=& borrow_global<CollectionPool>(get_pool_address(string::utf8(b"Mokshya Collection"))).offer; 
+        assert!(table::contains(pool_offer, lender_addr),ENO_NO_OFFERS);
+        
+        let offer_in = table::borrow(pool_offer,lender_addr);
+        assert!(offer_in==lender_offer,1014);
+
+        lender_offer_cancel(
+            &lender,
+            string::utf8(b"Mokshya Collection"));
+        
+        assert!(!table::contains(& borrow_global<Lender>(lender_addr).offers,  string::utf8(b"Mokshya Collection")),1015);
+        assert!(!table::contains(& borrow_global<CollectionPool>(get_pool_address(string::utf8(b"Mokshya Collection"))).offer, lender_addr),ENO_NO_OFFERS);
+    } 
+    #[test(creator = @0xa11ce, receiver = @0xb0b, lender =@0xa0b, borrowlend = @borrowlend,aptos_framework = @0x1,)]
+    fun test_borrow_select(
+        creator: signer,
+        receiver: signer,
+        borrowlend: signer,
+        lender:signer,
+        aptos_framework:signer,
+    )acquires CollectionPool,PoolMap,Lender,Borrower{
+       let sender_addr = signer::address_of(&creator);
+       let receiver_addr = signer::address_of(&receiver);
+       let lender_addr = signer::address_of(&lender);
+        aptos_framework::account::create_account_for_test(sender_addr);
+        aptos_framework::account::create_account_for_test(receiver_addr);
+        aptos_framework::account::create_account_for_test(lender_addr);
+        let collection_name =  string::utf8(b"Mokshya Collection");
+        let token_name = string::utf8(b"Mokshya Token #1");
+        create_collection_token(&creator,&receiver);
+        initialize_for_test(&borrowlend,&creator);
+        let collection_pool = get_pool_address(string::utf8(b"Mokshya Collection"));
+        deposit_fund(&lender,&aptos_framework);
+        lender_offer(
+            &lender,
+            collection_name,
+            10,
+            1
+        );
+        aptos_framework::timestamp::set_time_has_started_for_testing(&aptos_framework);
+        aptos_framework::timestamp::update_global_time_for_test_secs(1000);
+        borrow_select(
+            &receiver,
+            collection_name,
+            token_name,
+            0,
+            lender_addr);
+        // verifying the borrower has received the amount
+        assert!(coin::balance<0x1::aptos_coin::AptosCoin>(receiver_addr)==10,1016);
+        // verifying the pool has the token 
+        let token_id = token::create_token_id_raw(sender_addr,collection_name,token_name,0);
+        //verifying the token owner has the token
+        assert!(balance_of(collection_pool,token_id)>=1,ENO_NO_TOKEN_IN_TOKEN_STORE);
+        
+    } 
+    #[test(creator = @0xa11ce, receiver = @0xb0b, lender =@0xa0b, borrowlend = @borrowlend,aptos_framework = @0x1,)]
+    fun test_borrow_pay_loan(
+        creator: signer,
+        receiver: signer,
+        borrowlend: signer,
+        lender:signer,
+        aptos_framework:signer,
+    )acquires CollectionPool,PoolMap,Lender,Borrower{
+       let sender_addr = signer::address_of(&creator);
+       let receiver_addr = signer::address_of(&receiver);
+       let lender_addr = signer::address_of(&lender);
+        aptos_framework::account::create_account_for_test(sender_addr);
+        aptos_framework::account::create_account_for_test(receiver_addr);
+        aptos_framework::account::create_account_for_test(lender_addr);
+        let collection_name =  string::utf8(b"Mokshya Collection");
+        let token_name = string::utf8(b"Mokshya Token #1");
+        create_collection_token(&creator,&receiver);
+        initialize_for_test(&borrowlend,&creator);
+        // let collection_pool = get_pool_address(string::utf8(b"Mokshya Collection"));
+        deposit_fund(&lender,&aptos_framework);
+        lender_offer(
+            &lender,
+            collection_name,
+            10,
+            1
+        );
+        aptos_framework::timestamp::set_time_has_started_for_testing(&aptos_framework);
+        aptos_framework::timestamp::update_global_time_for_test_secs(1000);
+        borrow_select(
+            &receiver,
+            collection_name,
+            token_name,
+            0,
+            lender_addr);
+        coin::transfer<0x1::aptos_coin::AptosCoin>(&lender,receiver_addr,10);
+        aptos_framework::timestamp::update_global_time_for_test_secs(1010);
+        borrower_pay_loan(
+            &receiver,
+            collection_name,
+            token_name,
+        ); 
+        // verifying the borrower has given back the amount
+        assert!(coin::balance<0x1::aptos_coin::AptosCoin>(receiver_addr)==0,1017);
+        // verifying the pool has the token 
+        let token_id = token::create_token_id_raw(sender_addr,collection_name,token_name,0);
+        //verifying the token owner has the token
+        assert!(balance_of(receiver_addr,token_id)>=1,ENO_NO_TOKEN_IN_TOKEN_STORE);
+    } 
+    #[test(creator = @0xa11ce, receiver = @0xb0b, lender =@0xa0b, borrowlend = @borrowlend,aptos_framework = @0x1,)]
+    #[expected_failure(abort_code = 12, location = Self)]
+    fun test_borrow_pay_after_time(
+        creator: signer,
+        receiver: signer,
+        borrowlend: signer,
+        lender:signer,
+        aptos_framework:signer,
+    )acquires CollectionPool,PoolMap,Lender,Borrower{
+       let sender_addr = signer::address_of(&creator);
+       let receiver_addr = signer::address_of(&receiver);
+       let lender_addr = signer::address_of(&lender);
+        aptos_framework::account::create_account_for_test(sender_addr);
+        aptos_framework::account::create_account_for_test(receiver_addr);
+        aptos_framework::account::create_account_for_test(lender_addr);
+        let collection_name =  string::utf8(b"Mokshya Collection");
+        let token_name = string::utf8(b"Mokshya Token #1");
+        create_collection_token(&creator,&receiver);
+        initialize_for_test(&borrowlend,&creator);
+        deposit_fund(&lender,&aptos_framework);
+        lender_offer(
+            &lender,
+            collection_name,
+            10,
+            1
+        );
+        aptos_framework::timestamp::set_time_has_started_for_testing(&aptos_framework);
+        aptos_framework::timestamp::update_global_time_for_test_secs(1000);
+        borrow_select(
+            &receiver,
+            collection_name,
+            token_name,
+            0,
+            lender_addr);
+        coin::transfer<0x1::aptos_coin::AptosCoin>(&lender,receiver_addr,10);
+        aptos_framework::timestamp::update_global_time_for_test_secs(87401);
+        borrower_pay_loan(
+            &receiver,
+            collection_name,
+            token_name,
+        ); 
+    } 
+    #[test(creator = @0xa11ce, receiver = @0xb0b, lender =@0xa0b, borrowlend = @borrowlend,aptos_framework = @0x1,)]
+    fun test_lender_claim_nft(
+        creator: signer,
+        receiver: signer,
+        borrowlend: signer,
+        lender:signer,
+        aptos_framework:signer,
+    )acquires CollectionPool,PoolMap,Lender,Borrower{
+       let sender_addr = signer::address_of(&creator);
+       let receiver_addr = signer::address_of(&receiver);
+       let lender_addr = signer::address_of(&lender);
+        aptos_framework::account::create_account_for_test(sender_addr);
+        aptos_framework::account::create_account_for_test(receiver_addr);
+        aptos_framework::account::create_account_for_test(lender_addr);
+        let collection_name =  string::utf8(b"Mokshya Collection");
+        let token_name = string::utf8(b"Mokshya Token #1");
+        create_collection_token(&creator,&receiver);
+        initialize_for_test(&borrowlend,&creator);
+        deposit_fund(&lender,&aptos_framework);
+        lender_offer(
+            &lender,
+            collection_name,
+            10,
+            1
+        );
+        aptos_framework::timestamp::set_time_has_started_for_testing(&aptos_framework);
+        aptos_framework::timestamp::update_global_time_for_test_secs(1000);
+        borrow_select(
+            &receiver,
+            collection_name,
+            token_name,
+            0,
+            lender_addr);
+        coin::transfer<0x1::aptos_coin::AptosCoin>(&lender,receiver_addr,10);
+        aptos_framework::timestamp::update_global_time_for_test_secs(87401);
+        lender_claim_nft(
+            &lender,
+            collection_name,
+            token_name,
+        );
+        // verifying the pool has the token 
+        let token_id = token::create_token_id_raw(sender_addr,collection_name,token_name,0);
+        //verifying the token owner has the token
+        assert!(balance_of(lender_addr,token_id)>=1,ENO_NO_TOKEN_IN_TOKEN_STORE);
+    } 
+    #[test(creator = @0xa11ce, receiver = @0xb0b, lender =@0xa0b, borrowlend = @borrowlend,aptos_framework = @0x1,)]
+    #[expected_failure(abort_code = 17, location = Self)]
+    fun test_lender_claim_before_time(
+        creator: signer,
+        receiver: signer,
+        borrowlend: signer,
+        lender:signer,
+        aptos_framework:signer,
+    )acquires CollectionPool,PoolMap,Lender,Borrower{
+       let sender_addr = signer::address_of(&creator);
+       let receiver_addr = signer::address_of(&receiver);
+       let lender_addr = signer::address_of(&lender);
+        aptos_framework::account::create_account_for_test(sender_addr);
+        aptos_framework::account::create_account_for_test(receiver_addr);
+        aptos_framework::account::create_account_for_test(lender_addr);
+        let collection_name =  string::utf8(b"Mokshya Collection");
+        let token_name = string::utf8(b"Mokshya Token #1");
+        create_collection_token(&creator,&receiver);
+        initialize_for_test(&borrowlend,&creator);
+        deposit_fund(&lender,&aptos_framework);
+        lender_offer(
+            &lender,
+            collection_name,
+            10,
+            1
+        );
+        aptos_framework::timestamp::set_time_has_started_for_testing(&aptos_framework);
+        aptos_framework::timestamp::update_global_time_for_test_secs(1000);
+        borrow_select(
+            &receiver,
+            collection_name,
+            token_name,
+            0,
+            lender_addr);
+        coin::transfer<0x1::aptos_coin::AptosCoin>(&lender,receiver_addr,10);
+        aptos_framework::timestamp::update_global_time_for_test_secs(2000);
+        lender_claim_nft(
+            &lender,
+            collection_name,
+            token_name,
+        );
+    } 
 }

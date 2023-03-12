@@ -1,6 +1,6 @@
 # borrow-lend-from-NFT
 Borrow Lend Contract in Aptos blockchain by Mokshya Protocol
-
+![Screenshot](architecture.png)
 # Init
 
 ```
