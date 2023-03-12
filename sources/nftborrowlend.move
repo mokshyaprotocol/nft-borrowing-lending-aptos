@@ -603,6 +603,28 @@ module borrowlend::borrowlend
         let token_id = token::create_token_id_raw(sender_addr,collection_name,token_name,0);
         //verifying the token owner has the token
         assert!(balance_of(collection_pool,token_id)>=1,ENO_NO_TOKEN_IN_TOKEN_STORE);
+        let coll_name = collection_name;
+        append(&mut coll_name,token_name);
+        // verify that the offer is been removed 
+        assert!(!table::contains(& borrow_global<Lender>(lender_addr).offers,collection_name),2000);
+        assert!(!table::contains(& borrow_global<CollectionPool>(get_pool_address(collection_name)).offer, lender_addr),ENO_NO_OFFERS);
+        // verify has been send to the lends
+        assert!(table::contains(& borrow_global<Lender>(lender_addr).lends,coll_name),2001);        
+        // verify changes in borrows of borrower
+        assert!(table::contains(& borrow_global<Borrower>(receiver_addr).borrows,coll_name),2002); 
+        //borrow the loan and verify the loan status
+        let loan = *table::borrow(& borrow_global<Borrower>(receiver_addr).borrows,coll_name);
+        let loan_info = Loan{
+            borrower:receiver_addr,
+            lender:lender_addr,
+            collection_name:collection_name,
+            token_name:token_name,
+            property_version:0,
+            start_time:1000,
+            dpr:86400,
+            amount:10,
+            days:1};
+        assert!(loan_info==loan,2003)
         
     } 
     #[test(creator = @0xa11ce, receiver = @0xb0b, lender =@0xa0b, borrowlend = @borrowlend,aptos_framework = @0x1,)]
@@ -652,6 +674,12 @@ module borrowlend::borrowlend
         let token_id = token::create_token_id_raw(sender_addr,collection_name,token_name,0);
         //verifying the token owner has the token
         assert!(balance_of(receiver_addr,token_id)>=1,ENO_NO_TOKEN_IN_TOKEN_STORE);
+        // after the borrower pays loan the lend info should be removed
+        let coll_name = collection_name;
+        append(&mut coll_name,token_name);
+        assert!(!table::contains(& borrow_global<CollectionPool>(get_pool_address(collection_name)).loans, token_name),2003);
+        assert!(!table::contains(& borrow_global<Lender>(lender_addr).lends,coll_name),2004);        
+        assert!(!table::contains(& borrow_global<Borrower>(receiver_addr).borrows,coll_name),2005); 
     } 
     #[test(creator = @0xa11ce, receiver = @0xb0b, lender =@0xa0b, borrowlend = @borrowlend,aptos_framework = @0x1,)]
     #[expected_failure(abort_code = 12, location = Self)]
@@ -739,6 +767,12 @@ module borrowlend::borrowlend
         let token_id = token::create_token_id_raw(sender_addr,collection_name,token_name,0);
         //verifying the token owner has the token
         assert!(balance_of(lender_addr,token_id)>=1,ENO_NO_TOKEN_IN_TOKEN_STORE);
+        // after the lender defaults the  NFT all the info needs to be deleted 
+        let coll_name = collection_name;
+        append(&mut coll_name,token_name);
+        assert!(!table::contains(& borrow_global<CollectionPool>(get_pool_address(collection_name)).loans, token_name),2006);
+        assert!(!table::contains(& borrow_global<Lender>(lender_addr).lends,coll_name),2007);        
+        assert!(!table::contains(& borrow_global<Borrower>(receiver_addr).borrows,coll_name),2008); 
     } 
     #[test(creator = @0xa11ce, receiver = @0xb0b, lender =@0xa0b, borrowlend = @borrowlend,aptos_framework = @0x1,)]
     #[expected_failure(abort_code = 17, location = Self)]
